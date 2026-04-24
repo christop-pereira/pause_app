@@ -19,7 +19,7 @@ https://visualstudio.microsoft.com/fr/vs/features/cplusplus/
 
 ### 1. Cloner le projet
 ```bash
-git clone https://github.com/christop-pereira/pause_app
+git clone https://github.com/christop-pereira/pause_app.git
 cd pause_app
 ```
 
