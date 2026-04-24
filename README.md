@@ -20,7 +20,7 @@ https://visualstudio.microsoft.com/fr/vs/features/cplusplus/
 ### 1. Cloner le projet
 ```bash
 git clone https://github.com/christop-pereira/pause_app
-cd pause
+cd pause_app
 ```
 
 ### 2. Installer les dépendances
