@@ -139,7 +139,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // ── Photo ─────────────────────────────────────────────
 
+  // Sur desktop (Windows/macOS/Linux), image_picker.pickImage(camera) renvoie
+  // null silencieusement → l'app a l'air figée. On rabat sur le sélecteur de
+  // fichier image et on prévient l'utilisateur. La caméra reste disponible
+  // normalement sur Android et iOS.
+  bool get _isDesktop =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
   Future<void> _takePhoto(AppProvider provider) async {
+    if (_isDesktop) {
+      _snack('Caméra non supportée sur desktop — choisis un fichier image', AppTheme.textSecondary);
+      await _pickImageFromFiles(provider);
+      return;
+    }
     if (!await _requestCameraPermission()) return;
     final img = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 85);
     if (img != null && mounted) {
@@ -148,7 +160,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _pickImageFromFiles(AppProvider provider) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      dialogTitle: 'Choisir une photo de profil',
+    );
+    if (result != null && result.files.single.path != null && mounted) {
+      await provider.setPhoto(result.files.single.path!);
+      _snack('Photo mise à jour ✓', AppTheme.success);
+    }
+  }
+
   Future<void> _pickFromGallery(AppProvider provider) async {
+    if (_isDesktop) {
+      await _pickImageFromFiles(provider);
+      return;
+    }
     if (!await _requestPhotosPermission()) return;
     final img = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (img != null && mounted) {
