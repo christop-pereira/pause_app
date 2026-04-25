@@ -58,6 +58,36 @@ class NotificationService {
     );
   }
 
+  /// Notification "comment ça s'est passé ?" à T+5min après un appel.
+  /// Best-effort : si l'OS bloque, le bandeau in-app prend le relai.
+  Future<void> scheduleDebriefAt({required int id, required DateTime when}) async {
+    try {
+      // Offset par 100000 pour ne pas collisionner avec les triggers programmés
+      final notifId = 100000 + id;
+      final tzWhen = tz.TZDateTime.from(when, tz.local);
+      await plugin.zonedSchedule(
+        notifId,
+        'Comment ça s\'est passé ?',
+        'Prends 30 secondes pour faire le point sur ton dernier moment.',
+        tzWhen,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _channelId, _channelName,
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } catch (_) {
+      // Sur desktop ou si la perm n'est pas accordée, on swallow l'erreur :
+      // le bandeau in-app reste le mécanisme principal.
+    }
+  }
+
   Future<void> cancelAll() async {
     await plugin.cancelAll();
   }

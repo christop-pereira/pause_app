@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../core/app_theme.dart';
+import '../providers/pending_provider.dart';
+import '../widgets/pending_debrief_banner.dart';
 import 'dashboard_screen.dart';
 import 'triggers_screen.dart';
 import 'settings_screen.dart';
@@ -11,13 +14,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _index = 0; // 0=Progrès, 1=Triggers, 2=Profil
-
-  // Note : le TriggerWatcherService est démarré globalement dans main().
-  // Le HomeScreen n'a plus besoin de gérer son cycle de vie, ce qui évite
-  // les bugs liés à pushAndRemoveUntil (qui détruit l'ancien HomeScreen et
-  // en recrée un nouveau, dans un ordre dispose/initState non garanti).
 
   final _pages = const [
     DashboardScreen(),
@@ -26,9 +24,50 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // À chaque ouverture du HomeScreen, on recharge les pendings et on
+    // bascule sur l'onglet Progrès si un débrief est dû — comme ça il est
+    // visible en premier.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final pending = context.read<PendingProvider>();
+      await pending.refresh();
+      if (mounted && pending.hasDue && _index != 0) {
+        setState(() => _index = 0);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Quand l'app revient au premier plan, on recharge les pendings
+    // (un dueAt a peut-être été atteint pendant que l'app était en arrière-plan)
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<PendingProvider>().refresh();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _index, children: _pages),
+      body: Column(
+        children: [
+          SafeArea(
+            bottom: false,
+            child: const PendingDebriefBanner(),
+          ),
+          Expanded(
+            child: IndexedStack(index: _index, children: _pages),
+          ),
+        ],
+      ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: AppTheme.border, width: 1)),

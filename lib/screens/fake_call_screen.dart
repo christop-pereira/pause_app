@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/app_theme.dart';
+import '../database/app_database.dart';
 import '../providers/app_provider.dart';
+import '../providers/pending_provider.dart';
 import '../services/audio_service.dart';
-import 'questionnaire_screen.dart';
+import '../services/notification_service.dart';
 
 class FakeCallScreen extends StatefulWidget {
   final String triggerId;
@@ -79,21 +81,46 @@ class _FakeCallScreenState extends State<FakeCallScreen>
     await AudioService.playAudio(audioPath.isEmpty ? null : audioPath);
   }
 
-  void _decline() {
+  // Délai avant que le débrief n'apparaisse à l'utilisateur.
+  // Le moment de faiblesse doit être passé pour que la réflexion soit honnête.
+  static const _debriefDelay = Duration(minutes: 5);
+
+  Future<void> _schedulePendingDebrief() async {
+    final dueAt = DateTime.now().add(_debriefDelay);
+    final pendingId = await AppDatabase.instance.insertPending(
+      triggerId: widget.triggerId,
+      triggerLabel: widget.triggerLabel,
+      dueAt: dueAt,
+    );
+    // Notif système comme rappel à T+5min — best effort, on n'attend pas
+    // le résultat. Si elle n'arrive pas (perm refusée, OS qui dort), le
+    // bandeau dans l'app prend le relai dès la prochaine ouverture.
+    NotificationService.instance.scheduleDebriefAt(
+      id: pendingId,
+      when: dueAt,
+    );
+    // Met à jour le provider pour que le bandeau apparaisse quand le user
+    // revient sur le HomeScreen
+    if (mounted) {
+      await context.read<PendingProvider>().refresh();
+    }
+  }
+
+  Future<void> _decline() async {
+    await _schedulePendingDebrief();
+    if (!mounted) return;
     Navigator.pop(context);
   }
 
-  void _endCall() {
+  Future<void> _endCall() async {
     _callTimer?.cancel();
     _completeSub?.cancel();
     AudioService.stop();
+    await _schedulePendingDebrief();
     if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => QuestionnaireScreen(triggerId: widget.triggerId),
-      ),
-    );
+    // Retour au HomeScreen — pas de pushReplacement vers le questionnaire.
+    // Le débrief s'affichera via le bandeau quand le dueAt sera atteint.
+    Navigator.pop(context);
   }
 
   String get _callDuration {

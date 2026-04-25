@@ -12,7 +12,7 @@ class AppDatabase {
 
     db = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE user(
@@ -47,6 +47,29 @@ class AppDatabase {
             reason TEXT
           )
         ''');
+
+        await db.execute('''
+          CREATE TABLE pending_questionnaires(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            triggerId TEXT,
+            triggerLabel TEXT,
+            dueAt INTEGER,
+            createdAt INTEGER
+          )
+        ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS pending_questionnaires(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              triggerId TEXT,
+              triggerLabel TEXT,
+              dueAt INTEGER,
+              createdAt INTEGER
+            )
+          ''');
+        }
       },
     );
   }
@@ -110,5 +133,29 @@ class AppDatabase {
       whereArgs: [since.toIso8601String().substring(0, 10)],
       orderBy: 'date ASC',
     );
+  }
+
+  // ── Pending questionnaires ────────────────────────────
+  Future<int> insertPending({
+    required String triggerId,
+    required String triggerLabel,
+    required DateTime dueAt,
+  }) async {
+    return await db.insert('pending_questionnaires', {
+      'triggerId': triggerId,
+      'triggerLabel': triggerLabel,
+      'dueAt': dueAt.millisecondsSinceEpoch,
+      'createdAt': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  /// Tous les pendings (peu importe leur dueAt). On filtre côté provider
+  /// pour distinguer "due" (dueAt <= now → débriefable) vs "future".
+  Future<List<Map<String, dynamic>>> getAllPending() async {
+    return await db.query('pending_questionnaires', orderBy: 'dueAt ASC');
+  }
+
+  Future<void> deletePending(int id) async {
+    await db.delete('pending_questionnaires', where: 'id = ?', whereArgs: [id]);
   }
 }

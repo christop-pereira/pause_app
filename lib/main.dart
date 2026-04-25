@@ -7,9 +7,11 @@ import 'core/app_theme.dart';
 import 'database/app_database.dart';
 import 'providers/app_provider.dart';
 import 'providers/dashboard_provider.dart';
+import 'providers/pending_provider.dart';
 import 'providers/trigger_provider.dart';
 import 'screens/fake_call_screen.dart';
 import 'screens/splash_screen.dart';
+import 'services/notification_service.dart';
 import 'services/trigger_watcher_service.dart';
 
 // Clé globale du Navigator → permet de pousser des écrans (ex: FakeCallScreen)
@@ -25,10 +27,11 @@ Future<void> main() async {
   }
 
   await AppDatabase.instance.init();
+  await NotificationService.instance.init();
 
   // Démarrage du watcher au niveau global, indépendant des écrans.
-  // La callback push le FakeCallScreen via le navigatorKey, donc le déclenchement
-  // fonctionne même quand on revient au HomeScreen via pushAndRemoveUntil.
+  // La callback push le FakeCallScreen via le navigatorKey, donc le
+  // déclenchement fonctionne même quand le HomeScreen est recréé.
   TriggerWatcherService.instance.onTrigger = (id, label) {
     final navState = navigatorKey.currentState;
     if (navState == null) return;
@@ -52,6 +55,11 @@ class PauseApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppProvider()),
         ChangeNotifierProvider(create: (_) => TriggerProvider()..load()),
         ChangeNotifierProvider(create: (_) => DashboardProvider()..load()),
+        ChangeNotifierProvider(
+          create: (_) => PendingProvider()
+            ..load()
+            ..startTicker(),
+        ),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
