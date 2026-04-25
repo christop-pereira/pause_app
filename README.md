@@ -44,3 +44,13 @@ flutter run -d ios
 ```bash
 flutter run
 ```
+
+## 🧹 Nettoyer le cache de build
+
+En cas d’erreur après déplacement du projet, renommage du dossier ou problème de compilation :
+
+```bash
+flutter clean  
+flutter pub get  
+flutter run
+```

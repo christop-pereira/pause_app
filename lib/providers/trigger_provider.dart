@@ -18,6 +18,12 @@ class TriggerProvider extends ChangeNotifier {
     await _reschedule();
   }
 
+  Future<void> update(TriggerModel trigger) async {
+    await AppDatabase.instance.updateTrigger(trigger.toMap());
+    await load();
+    await _reschedule();
+  }
+
   Future<void> toggleActive(String id) async {
     final t = triggers.firstWhere((t) => t.id == id);
     final newActive = t.active == 1 ? 0 : 1;

@@ -1,11 +1,12 @@
 class TriggerModel {
   final String id;
-  final String type; // 'time', 'location', 'both'
+  final String type;
   final String label;
-  final String? days;   // ex: "0,1,4" (indices lundi=0..dim=6)
-  final String? time;   // ex: "18:30"
+  final String? days;
+  final String? time;
   final double? lat;
   final double? lng;
+  final String? locationName;
   final double radius;
   final int active;
 
@@ -17,20 +18,33 @@ class TriggerModel {
     this.time,
     this.lat,
     this.lng,
+    this.locationName,
     this.radius = 150,
     this.active = 1,
   });
 
-  TriggerModel copyWith({int? active}) {
+  // copyWith avec sentinel pour distinguer "non passé" de "null voulu"
+  TriggerModel copyWith({
+    String? type,
+    String? label,
+    Object? days = _sentinel,
+    Object? time = _sentinel,
+    Object? lat = _sentinel,
+    Object? lng = _sentinel,
+    Object? locationName = _sentinel,
+    double? radius,
+    int? active,
+  }) {
     return TriggerModel(
       id: id,
-      type: type,
-      label: label,
-      days: days,
-      time: time,
-      lat: lat,
-      lng: lng,
-      radius: radius,
+      type: type ?? this.type,
+      label: label ?? this.label,
+      days: days == _sentinel ? this.days : days as String?,
+      time: time == _sentinel ? this.time : time as String?,
+      lat: lat == _sentinel ? this.lat : lat as double?,
+      lng: lng == _sentinel ? this.lng : lng as double?,
+      locationName: locationName == _sentinel ? this.locationName : locationName as String?,
+      radius: radius ?? this.radius,
       active: active ?? this.active,
     );
   }
@@ -49,6 +63,7 @@ class TriggerModel {
       'time': time,
       'lat': lat,
       'lng': lng,
+      'locationName': locationName,
       'radius': radius,
       'active': active,
     };
@@ -63,8 +78,12 @@ class TriggerModel {
       time: map['time'],
       lat: map['lat'],
       lng: map['lng'],
+      locationName: map['locationName'],
       radius: (map['radius'] ?? 150).toDouble(),
       active: map['active'] ?? 1,
     );
   }
 }
+
+// Sentinel pour distinguer null explicite de "non fourni"
+const Object _sentinel = Object();

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/app_theme.dart';
@@ -28,6 +29,7 @@ class _FakeCallScreenState extends State<FakeCallScreen>
   late Animation<double> _pulseAnim;
   Timer? _callTimer;
   int _callSeconds = 0;
+  StreamSubscription? _completeSub;
 
   @override
   void initState() {
@@ -36,11 +38,9 @@ class _FakeCallScreenState extends State<FakeCallScreen>
       vsync: this,
       duration: const Duration(seconds: 1),
     )..repeat(reverse: true);
-    _pulseAnim = Tween(begin: 0.95, end: 1.05).animate(
+    _pulseAnim = Tween(begin: 0.94, end: 1.06).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-
-    // Lancer la sonnerie
     AudioService.startRingtone();
   }
 
@@ -48,6 +48,7 @@ class _FakeCallScreenState extends State<FakeCallScreen>
   void dispose() {
     _pulseController.dispose();
     _callTimer?.cancel();
+    _completeSub?.cancel();
     AudioService.stopRingtone();
     AudioService.stop();
     super.dispose();
@@ -55,24 +56,27 @@ class _FakeCallScreenState extends State<FakeCallScreen>
 
   Future<void> _accept() async {
     await AudioService.stopRingtone();
-    setState(() { _inCall = true; _audioPlaying = true; });
 
-    // Démarrer le timer
+    setState(() {
+      _inCall = true;
+      _audioPlaying = true;
+    });
+
     _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _callSeconds++);
     });
 
-    // Jouer l'audio de l'utilisateur
-    final audioPath = context.read<AppProvider>().audioPath;
-    if (audioPath.isNotEmpty) {
-      try {
-        await AudioService.playFile(audioPath);
-      } catch (_) {}
-    }
+    // Écouter la fin de l'audio → raccrocher automatiquement
+    _completeSub = AudioService.onComplete$.listen((_) {
+      if (!mounted) return;
+      setState(() => _audioPlaying = false);
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) _endCall();
+      });
+    });
 
-    // Après 5 sec minimum, proposer de terminer
-    await Future.delayed(const Duration(seconds: 5));
-    if (mounted) setState(() => _audioPlaying = false);
+    final audioPath = context.read<AppProvider>().audioPath;
+    await AudioService.playAudio(audioPath.isEmpty ? null : audioPath);
   }
 
   void _decline() {
@@ -81,7 +85,9 @@ class _FakeCallScreenState extends State<FakeCallScreen>
 
   void _endCall() {
     _callTimer?.cancel();
+    _completeSub?.cancel();
     AudioService.stop();
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -98,75 +104,59 @@ class _FakeCallScreenState extends State<FakeCallScreen>
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A12),
+      backgroundColor: const Color(0xFF08080F),
       body: SafeArea(
-        child: _inCall ? _buildInCall() : _buildRinging(),
+        child: SizedBox(
+          width: double.infinity,
+          child: _inCall ? _buildInCall(provider) : _buildRinging(provider),
+        ),
       ),
     );
   }
 
-  Widget _buildRinging() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        children: [
-          const SizedBox(height: 80),
-          // Avatar animé
-          ScaleTransition(
-            scale: _pulseAnim,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppTheme.primary.withOpacity(0.3),
-                    AppTheme.primary.withOpacity(0.05),
-                  ],
-                ),
-                border: Border.all(color: AppTheme.primary.withOpacity(0.4), width: 2),
-              ),
-              child: const Center(
-                child: Text('⏸', style: TextStyle(fontSize: 52)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'PAUSE',
-            style: TextStyle(
+  // ── Sonnerie ────────────────────────────────────────────
+  Widget _buildRinging(AppProvider provider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const SizedBox(height: 80),
+        ScaleTransition(
+          scale: _pulseAnim,
+          child: _avatar(provider, 120),
+        ),
+        const SizedBox(height: 28),
+        const Text(
+          'PAUSE',
+          style: TextStyle(
               color: Colors.white,
               fontSize: 32,
               fontWeight: FontWeight.w700,
-              letterSpacing: -0.5,
-            ),
+              letterSpacing: -0.5),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          widget.triggerLabel,
+          style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 15),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(20),
           ),
-          const SizedBox(height: 8),
-          Text(
-            widget.triggerLabel,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
-              fontSize: 16,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'Appel entrant...',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-          ),
-          const Spacer(),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          child: const Text('Appel entrant…',
+              style: TextStyle(color: Colors.white60, fontSize: 13)),
+        ),
+        const Spacer(),
+        // Boutons répondre / refuser
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 60),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _callButton(
                 icon: Icons.call_end_rounded,
@@ -174,6 +164,7 @@ class _FakeCallScreenState extends State<FakeCallScreen>
                 label: 'Ignorer',
                 onTap: _decline,
               ),
+              SizedBox(width: MediaQuery.of(context).size.width * 0.18),
               _callButton(
                 icon: Icons.call_rounded,
                 color: AppTheme.success,
@@ -182,76 +173,127 @@ class _FakeCallScreenState extends State<FakeCallScreen>
               ),
             ],
           ),
-          const SizedBox(height: 48),
-        ],
-      ),
+        ),
+        const SizedBox(height: 56),
+      ],
     );
   }
 
-  Widget _buildInCall() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        children: [
-          const SizedBox(height: 80),
-          Container(
-            width: 120,
-            height: 120,
+  // ── En communication ──────────────────────────────────
+  Widget _buildInCall(AppProvider provider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const SizedBox(height: 80),
+        _avatar(provider, 110),
+        const SizedBox(height: 24),
+        const Text(
+          'PAUSE',
+          style: TextStyle(
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.5),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _callDuration,
+          style: TextStyle(
+              color: AppTheme.success.withOpacity(0.8),
+              fontSize: 18,
+              fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 14),
+        if (_audioPlaying)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.graphic_eq_rounded,
+                  color: AppTheme.success, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                'Message en cours…',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.55), fontSize: 13),
+              ),
+            ],
+          ),
+        const Spacer(),
+        // Bouton raccrocher centré
+        GestureDetector(
+          onTap: _endCall,
+          child: Container(
+            width: 68,
+            height: 68,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppTheme.success.withOpacity(0.1),
-              border: Border.all(color: AppTheme.success.withOpacity(0.3), width: 2),
-            ),
-            child: const Center(
-              child: Text('⏸', style: TextStyle(fontSize: 52)),
-            ),
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'PAUSE',
-            style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: -0.5),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _callDuration,
-            style: TextStyle(color: AppTheme.success.withOpacity(0.8), fontSize: 18, fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 16),
-          if (_audioPlaying)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.graphic_eq_rounded, color: AppTheme.success, size: 18),
-                const SizedBox(width: 6),
-                Text(
-                  'Message en cours...',
-                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
-                ),
+              color: AppTheme.danger,
+              boxShadow: [
+                BoxShadow(
+                    color: AppTheme.danger.withOpacity(0.4),
+                    blurRadius: 24,
+                    spreadRadius: 2)
               ],
             ),
-          const Spacer(),
-          // Bouton raccrocher
-          GestureDetector(
-            onTap: _endCall,
-            child: Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.danger,
-                boxShadow: [BoxShadow(color: AppTheme.danger.withOpacity(0.4), blurRadius: 20, spreadRadius: 2)],
-              ),
-              child: const Icon(Icons.call_end_rounded, color: Colors.white, size: 28),
-            ),
+            child: const Icon(Icons.call_end_rounded,
+                color: Colors.white, size: 26),
           ),
-          const SizedBox(height: 12),
-          const Text('Raccrocher', style: TextStyle(color: Colors.white54, fontSize: 12)),
-          const SizedBox(height: 48),
-        ],
+        ),
+        const SizedBox(height: 10),
+        const Text('Raccrocher',
+            style: TextStyle(color: Colors.white38, fontSize: 12)),
+        const SizedBox(height: 56),
+      ],
+    );
+  }
+
+  // ── Avatar ────────────────────────────────────────────
+  Widget _avatar(AppProvider provider, double size) {
+    Widget inner;
+    if (provider.hasPhoto) {
+      try {
+        inner = Image.file(
+          File(provider.photoPath),
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _defaultAvatarInner(size),
+        );
+      } catch (_) {
+        inner = _defaultAvatarInner(size);
+      }
+    } else {
+      inner = _defaultAvatarInner(size);
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border:
+            Border.all(color: AppTheme.primary.withOpacity(0.35), width: 2),
+      ),
+      child: ClipOval(child: inner),
+    );
+  }
+
+  Widget _defaultAvatarInner(double size) {
+    return Container(
+      width: size,
+      height: size,
+      color: AppTheme.primary.withOpacity(0.12),
+      child: Center(
+        child: Image.asset(
+          'assets/images/avatar.png',
+          width: size * 0.6,
+          height: size * 0.6,
+        ),
       ),
     );
   }
 
+  // ── Bouton d'appel ────────────────────────────────────
   Widget _callButton({
     required IconData icon,
     required Color color,
@@ -259,22 +301,28 @@ class _FakeCallScreenState extends State<FakeCallScreen>
     required VoidCallback onTap,
   }) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         GestureDetector(
           onTap: onTap,
           child: Container(
-            width: 72,
-            height: 72,
+            width: 68,
+            height: 68,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: color,
-              boxShadow: [BoxShadow(color: color.withOpacity(0.35), blurRadius: 20, spreadRadius: 2)],
+              boxShadow: [
+                BoxShadow(
+                    color: color.withOpacity(0.35),
+                    blurRadius: 20,
+                    spreadRadius: 2)
+              ],
             ),
-            child: Icon(icon, color: Colors.white, size: 28),
+            child: Icon(icon, color: Colors.white, size: 26),
           ),
         ),
-        const SizedBox(height: 10),
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        const SizedBox(height: 9),
+        Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
       ],
     );
   }

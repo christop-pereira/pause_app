@@ -8,9 +8,13 @@ import 'database/app_database.dart';
 import 'providers/app_provider.dart';
 import 'providers/dashboard_provider.dart';
 import 'providers/trigger_provider.dart';
+import 'screens/fake_call_screen.dart';
 import 'screens/splash_screen.dart';
-import 'services/notification_service.dart';
-import 'services/scheduler_service.dart';
+import 'services/trigger_watcher_service.dart';
+
+// Clé globale du Navigator → permet de pousser des écrans (ex: FakeCallScreen)
+// depuis n'importe où, sans dépendre d'un BuildContext.
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,8 +25,19 @@ Future<void> main() async {
   }
 
   await AppDatabase.instance.init();
-  await NotificationService.instance.init();
-  await SchedulerService.instance.init();
+
+  // Démarrage du watcher au niveau global, indépendant des écrans.
+  // La callback push le FakeCallScreen via le navigatorKey, donc le déclenchement
+  // fonctionne même quand on revient au HomeScreen via pushAndRemoveUntil.
+  TriggerWatcherService.instance.onTrigger = (id, label) {
+    final navState = navigatorKey.currentState;
+    if (navState == null) return;
+    navState.push(MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => FakeCallScreen(triggerId: id, triggerLabel: label),
+    ));
+  };
+  TriggerWatcherService.instance.start();
 
   runApp(const PauseApp());
 }
@@ -42,6 +57,7 @@ class PauseApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         title: 'PAUSE',
         theme: AppTheme.darkTheme,
+        navigatorKey: navigatorKey,
         home: const SplashScreen(),
       ),
     );

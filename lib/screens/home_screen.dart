@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/app_theme.dart';
-import 'triggers_screen.dart';
 import 'dashboard_screen.dart';
+import 'triggers_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -12,11 +12,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _index = 0;
+  int _index = 0; // 0=Progrès, 1=Triggers, 2=Profil
+
+  // Note : le TriggerWatcherService est démarré globalement dans main().
+  // Le HomeScreen n'a plus besoin de gérer son cycle de vie, ce qui évite
+  // les bugs liés à pushAndRemoveUntil (qui détruit l'ancien HomeScreen et
+  // en recrée un nouveau, dans un ordre dispose/initState non garanti).
 
   final _pages = const [
-    TriggersScreen(),
     DashboardScreen(),
+    TriggersScreen(),
     SettingsScreen(),
   ];
 
@@ -33,14 +38,14 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: (i) => setState(() => _index = i),
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.bolt_outlined),
-              activeIcon: Icon(Icons.bolt_rounded),
-              label: 'Triggers',
-            ),
-            BottomNavigationBarItem(
               icon: Icon(Icons.bar_chart_outlined),
               activeIcon: Icon(Icons.bar_chart_rounded),
               label: 'Progrès',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.bolt_outlined),
+              activeIcon: Icon(Icons.bolt_rounded),
+              label: 'Triggers',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_outline_rounded),

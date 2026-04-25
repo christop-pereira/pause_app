@@ -8,7 +8,7 @@ class AppDatabase {
   late Database db;
 
   Future<void> init() async {
-    final path = join(await getDatabasesPath(), 'pause_v2.db');
+    final path = join(await getDatabasesPath(), 'pause_v3.db');
 
     db = await openDatabase(
       path,
@@ -18,7 +18,8 @@ class AppDatabase {
           CREATE TABLE user(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT,
-            audioPath TEXT
+            audioPath TEXT,
+            photoPath TEXT
           )
         ''');
 
@@ -31,6 +32,7 @@ class AppDatabase {
             time TEXT,
             lat REAL,
             lng REAL,
+            locationName TEXT,
             radius REAL DEFAULT 150,
             active INTEGER DEFAULT 1
           )
@@ -55,13 +57,19 @@ class AppDatabase {
     return rows.isEmpty ? null : rows.first;
   }
 
-  Future<void> saveUser(String name, String? audioPath) async {
+  Future<void> saveUser(String name, String? audioPath, {String? photoPath}) async {
     final existing = await getUser();
     if (existing == null) {
-      await db.insert('user', {'name': name, 'audioPath': audioPath});
+      await db.insert('user', {'name': name, 'audioPath': audioPath, 'photoPath': photoPath});
     } else {
-      await db.update('user', {'name': name, 'audioPath': audioPath});
+      final data = {'name': name, 'audioPath': audioPath};
+      if (photoPath != null) data['photoPath'] = photoPath;
+      await db.update('user', data);
     }
+  }
+
+  Future<void> updateUserPhoto(String? photoPath) async {
+    await db.update('user', {'photoPath': photoPath});
   }
 
   // ── Triggers ──────────────────────────────────────────
@@ -71,6 +79,10 @@ class AppDatabase {
 
   Future<void> insertTrigger(Map<String, dynamic> data) async {
     await db.insert('triggers', data);
+  }
+
+  Future<void> updateTrigger(Map<String, dynamic> data) async {
+    await db.update('triggers', data, where: 'id = ?', whereArgs: [data['id']]);
   }
 
   Future<void> updateTriggerActive(String id, int active) async {
