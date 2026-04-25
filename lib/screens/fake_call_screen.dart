@@ -275,24 +275,10 @@ class _FakeCallScreenState extends State<FakeCallScreen>
   }
 
   // ── Avatar ────────────────────────────────────────────
+  // Aligné sur le rendu du SettingsScreen :
+  // - photo perso → Image.file en cover, fallback sur l'avatar par défaut si KO
+  // - sans photo → l'avatar par défaut remplit tout le cercle (BoxFit.cover)
   Widget _avatar(AppProvider provider, double size) {
-    Widget inner;
-    if (provider.hasPhoto) {
-      try {
-        inner = Image.file(
-          File(provider.photoPath),
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _defaultAvatarInner(size),
-        );
-      } catch (_) {
-        inner = _defaultAvatarInner(size);
-      }
-    } else {
-      inner = _defaultAvatarInner(size);
-    }
-
     return Container(
       width: size,
       height: size,
@@ -301,21 +287,15 @@ class _FakeCallScreenState extends State<FakeCallScreen>
         border:
             Border.all(color: AppTheme.primary.withOpacity(0.35), width: 2),
       ),
-      child: ClipOval(child: inner),
-    );
-  }
-
-  Widget _defaultAvatarInner(double size) {
-    return Container(
-      width: size,
-      height: size,
-      color: AppTheme.primary.withOpacity(0.12),
-      child: Center(
-        child: Image.asset(
-          'assets/images/avatar.png',
-          width: size * 0.6,
-          height: size * 0.6,
-        ),
+      child: ClipOval(
+        child: provider.hasPhoto
+            ? Image.file(
+                File(provider.photoPath),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    Image.asset('assets/images/avatar.png', fit: BoxFit.cover),
+              )
+            : Image.asset('assets/images/avatar.png', fit: BoxFit.cover),
       ),
     );
   }
